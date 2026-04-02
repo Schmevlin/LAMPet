@@ -1,0 +1,37 @@
+<AttributeBar>:
+    orientation: 'horizontal'
+    size_hint_y: None
+    height: dp(20)
+    padding: [10, 5]
+
+    Label:
+        size_hint_x: 0.2
+        text: root.label_text
+        text_size: self.size
+        halign: 'left'
+        color: 0, 0, 0, 1
+        font_size: '10sp'
+
+    Widget:
+        size_hint_x: 0.8
+        id: bar_canvas
+        canvas.before:
+            Color:
+                rgba: 0.2, 0.2, 0.2, 0.1  # Background "Track"
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [self.height/2]
+        canvas:
+            Color:
+                rgba: root.bar_color
+            RoundedRectangle:
+                # Offset position by the inner_padding
+                pos: (self.x + root.inner_padding, self.y + root.inner_padding)
+                # Dynamic Size Calculation:
+                # Width = (Total Width - Padding) * (Value / Max)
+                # Height = Total Height - (Padding * 2)
+                size: 
+                    ( (self.width - (root.inner_padding * 2)) * (root.value / root.max_value), 
+                    self.height - (root.inner_padding * 2) ) if root.max_value > 0 else (0, 0)
+                radius: [(self.height - (root.inner_padding * 2)) / 2.0]

@@ -1,0 +1,40 @@
+#:kivy 1.9
+#:import hsv_to_rgb colorsys.hsv_to_rgb
+#:import rgb_to_hsv colorsys.rgb_to_hsv
+
+<LampetScreen>:
+    FloatLayout:
+        canvas.before:
+            Color:
+                rgba: offwhite
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        Image:
+            source: 'images/guy.png'
+            size_hint: (None, None)
+            size: (root.width/4, root.width/4)
+            allow_stretch: True
+            x: app.hue * root.width - self.width/2
+            y: app.saturation * root.height - self.height/2
+        BoxLayout:
+            size_hint: (0.5, 0.3)
+            pos_hint: {'x': 0, 'top': 1}
+            orientation: 'vertical'
+            padding: dp(10)
+            AttributeBar:
+                label_text: 'hgr'
+                value: app.brightness * 100
+            AttributeBar:
+                label_text: 'cln'
+                value: app.brightness * 100
+            AttributeBar:
+                label_text: 'hpy'
+                value: app.brightness * 100
+
+        Button:
+            text: 'swap page'
+            size_hint: (1, 0.1)  # 10% of screen height
+            pos_hint: {'x': 0, 'y': 0}
+            on_release: root.manager.current = 'lampi'
