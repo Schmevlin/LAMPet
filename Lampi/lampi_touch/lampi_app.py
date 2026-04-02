@@ -18,6 +18,7 @@ import lampi_touch.lampi_util
 from mixpanel import Mixpanel
 
 from .widgets.attribute_bar import AttributeBar
+from .widgets.lampet_sprite import LAMPetSprite
 
 MQTT_CLIENT_ID = "lamp_ui"
 
@@ -49,6 +50,63 @@ class LampiApp(App):
         sm.add_widget(LampetScreen(name='lampet'))
         sm.add_widget(LampiScreen(name='lampi'))
         return sm
+
+    _lampet_x = NumericProperty(20)
+    _lampet_y = NumericProperty(40)
+
+
+    def _get_lampet_x(self) -> float:
+        return self._lampet_x
+
+    def _set_lampet_x(self, value: float) -> None:
+        if value > self.root.width:
+            value = self.root.width
+        self._lampet_x = value
+
+    def _get_lampet_y(self) -> float:
+        return self._lampet_y
+
+    def _set_lampet_y(self, value: float) -> None:
+        if value > self.root.height:
+            value = self.root.height
+        self._lampet_y = value
+
+    lampet_x = AliasProperty(_get_lampet_x, _set_lampet_x, bind=['_lampet_x'])
+    lampet_y = AliasProperty(_get_lampet_y, _set_lampet_y, bind=['_lampet_y'])
+
+    _hunger = NumericProperty(0)
+    _cleanliness = NumericProperty(0)
+    _happiness = NumericProperty(0)
+
+    def _get_hunger(self) -> float:
+        return self._hunger
+
+    def _set_hunger(self, value: float) -> None:
+        if value > 100:
+            value = 100
+        self._hunger = value
+
+    def _get_cleanliness(self) -> float:
+        return self._cleanliness
+
+    def _set_cleanliness(self, value: float) -> None:
+        if value > 100:
+            value = 100
+        self._cleanliness = value
+
+    def _get_happiness(self) -> float:
+        return self._happiness
+
+    def _set_happiness(self, value: float) -> None:
+        if value > 100:
+            value = 100
+        self._happiness = value
+
+    hunger = AliasProperty(_get_hunger, _set_hunger, bind=['_hunger'])
+    cleanliness = AliasProperty(_get_cleanliness, _set_cleanliness, bind=['_cleanliness'])
+    happiness = AliasProperty(_get_happiness, _set_happiness, bind=['_happiness'])
+
+    # From here down is lampi code
 
     _updated: bool = False
     _updating_ui: bool = False
