@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+import json
+import sys
+import argparse
+from time import sleep
+from typing import Any, Optional
+import paho.mqtt.client as mqtt
+from paho.mqtt.client import Client, CallbackAPIVersion
+from lamp_common import *
+
+MQTT_CLIENT_ID = 'lampet_cmd'
+
+
+class LampetCmd:
+
+    def __init__(self) -> None:
+        # start with default state in case no message received yet
+        self.received_pet_state: dict[str, Any] = {
+            'hunger': 100,
+            'happiness': 100,
+            'cleanliness': 100
+        }
+
+        self.client: Client = Client(
+            callback_api_version=CallbackAPIVersion.VERSION2,
+            client_id=MQTT_CLIENT_ID
+        )
+        self.client.enable_logger()
+        self.client.on_connect = self.on_connect
+        self.client.connect(MQTT_BROKER_HOST,
+                            port=MQTT_BROKER_PORT,
+                            keepalive=MQTT_BROKER_KEEP_ALIVE_SECS)
+        self.client.loop_start()
+
+    def build_argument_parser(self) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--hunger', type=int, help='Hunger value 0-100')
+        parser.add_argument('--happiness', type=int, help='Happiness value 0-100')
+        parser.add_argument('--cleanliness', type=int, help='Cleanliness value 0-100')
+        return parser
+
+    def _receive_pet_state(self, client: Client, userdata: Any,
+                           message: mqtt.MQTTMessage) -> None:
+        self.received_pet_state = json.loads(message.payload.decode('utf-8'))
+
+    def _print_pet_state(self) -> None:
+        print("Hunger: {} Happiness: {} Cleanliness: {}".format(
+            self.received_pet_state['hunger'],
+            self.received_pet_state['happiness'],
+            self.received_pet_state['cleanliness']
+        ))
+
+    def on_connect(self, client: Client, userdata: Any,
+                   flags: mqtt.ConnectFlags, reason_code: mqtt.ReasonCode,
+                   properties: Optional[mqtt.Properties]) -> None:
+        client.message_callback_add(TOPIC_LAMPet_CHANGE_NOTIFICATION,
+                                    self._receive_pet_state)
+        client.subscribe(TOPIC_LAMPet_CHANGE_NOTIFICATION, qos=1)
+
+    def update_pet_state(self) -> None:
+        args = self.build_argument_parser().parse_args()
+        
+        print(args)
+
+        # apply CLI args to current state
+        if args.hunger is not None:
+            self.received_pet_state['hunger'] = args.hunger
+        if args.happiness is not None:
+            self.received_pet_state['happiness'] = args.happiness
+        if args.cleanliness is not None:
+            self.received_pet_state['cleanliness'] = args.cleanliness
+
+        print(self.received_pet_state)
+        # publish the new state
+        self.client.publish(TOPIC_SET_LAMPet_CONFIG,
+                            json.dumps(self.received_pet_state).encode('utf-8'),
+                            qos=1)
+        
+        sleep(0.1)
+        self.client.loop_stop()
+
+def main() -> None:
+    cmd = LampetCmd()
+
+    if len(sys.argv) > 1:
+        cmd.update_pet_state()
+    else:
+        # give a little time to receive current state
+        sleep(0.1)
+        cmd._print_pet_state()
+
+
+if __name__ == '__main__':
+    main()

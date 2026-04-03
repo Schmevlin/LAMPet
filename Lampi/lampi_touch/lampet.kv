@@ -6,7 +6,7 @@
     FloatLayout:
         canvas.before:
             Color:
-                rgba: offwhite
+                rgba: 0.95, 0.85, 0.60, 1
             Rectangle:
                 pos: self.pos
                 size: self.size
@@ -39,15 +39,15 @@
             Button:
                 size_hint_x: 0.25
                 text: 'play'
-                on_release: app.happiness += 10
+                on_release: app.happiness += 20
             Button:
                 size_hint_x: 0.25
                 text: 'feed'
-                on_release: app.hunger += 10
+                on_release: app.hunger += 20
             Button:
                 size_hint_x: 0.25
                 text: 'clean'
-                on_release: app.cleanliness += 10
+                on_release: app.cleanliness += 30
             Button:
                 size_hint_x: 0.25
                 text: 'swap\npage'

@@ -59,6 +59,12 @@ class LampService:
             self.db['on'] = True
         if 'client' not in self.db:
             self.db['client'] = ''
+        if 'pet_state' not in self.db:
+            self.db['pet_state'] = {
+                'hunger': 100,
+                'happiness': 100,
+                'cleanliness': 100
+            }
         self.write_current_settings_to_hardware()
 
     def _create_and_configure_broker_client(self) -> mqtt.Client:
@@ -73,6 +79,7 @@ class LampService:
         client.on_connect = self.on_connect
         client.message_callback_add(TOPIC_SET_LAMP_CONFIG,
                                     self.on_message_set_config)
+        client.message_callback_add(TOPIC_SET_LAMPet_CONFIG, self.on_message_set_pet_status)
         client.on_message = self.default_on_message
         return client
 
@@ -106,6 +113,7 @@ class LampService:
         self._client.publish(client_state_topic(MQTT_CLIENT_ID), "1",
                              qos=2, retain=True)
         self._client.subscribe(TOPIC_SET_LAMP_CONFIG, qos=1)
+        self._client.subscribe(TOPIC_SET_LAMPet_CONFIG, qos=1)
         # publish current lamp state at startup
         self.publish_config_change()
 
@@ -130,6 +138,19 @@ class LampService:
             self.publish_config_change()
         except InvalidLampConfig:
             print("error applying new settings " + str(msg.payload))
+            
+    def on_message_set_pet_status(self, client, userdata, msg):
+        try:
+            new_status = json.loads(msg.payload.decode('utf-8'))
+            # Validate keys
+            for key in ['hunger', 'happiness', 'cleanliness']:
+                if key not in new_status:
+                    print(f"Invalid pet payload, missing {key}")
+                    return
+            self.db['pet_state'] = new_status
+            self.publish_pet_change()
+        except Exception as e:
+            print("Error processing pet message:", e)
 
     def publish_config_change(self) -> None:
         config = {'color': self.get_current_color(),
@@ -139,6 +160,12 @@ class LampService:
         self._client.publish(TOPIC_LAMP_CHANGE_NOTIFICATION,
                              json.dumps(config).encode('utf-8'), qos=1,
                              retain=True)
+    
+    def publish_pet_change(self):
+        pet_status = self.db['pet_state']
+        self._client.publish(TOPIC_LAMPet_CHANGE_NOTIFICATION, 
+                            json.dumps(pet_status).encode('utf-8'),
+                            qos=1, retain=True)
 
     def get_last_client(self) -> str:
         return self.db['client']

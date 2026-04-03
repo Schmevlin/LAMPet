@@ -2,6 +2,7 @@ import json
 from kivy.uix.boxlayout import BoxLayout
 import pigpio
 from typing import Any, Optional
+from random import choice, randint
 
 from kivy.app import App
 from kivy.properties import NumericProperty, AliasProperty, BooleanProperty, StringProperty, ColorProperty
@@ -74,9 +75,9 @@ class LampiApp(App):
     lampet_x = AliasProperty(_get_lampet_x, _set_lampet_x, bind=['_lampet_x'])
     lampet_y = AliasProperty(_get_lampet_y, _set_lampet_y, bind=['_lampet_y'])
 
-    _hunger = NumericProperty(0)
-    _cleanliness = NumericProperty(0)
-    _happiness = NumericProperty(0)
+    _hunger = NumericProperty(50)
+    _cleanliness = NumericProperty(50)
+    _happiness = NumericProperty(50)
 
     def _get_hunger(self) -> float:
         return self._hunger
@@ -163,12 +164,49 @@ class LampiApp(App):
         self.associated_status_popup = self._build_associated_status_popup()
         self.associated_status_popup.bind(on_open=self.update_popup_associated)
         Clock.schedule_interval(self._poll_associated, 0.1)
+        Clock.schedule_interval(self._decay_happiness, 5)
+        Clock.schedule_interval(self._decay_cleanliness, 20)
+        Clock.schedule_interval(self._pet_walk, 0.2)
 
     def _build_associated_status_popup(self):
         return Popup(title='Associate your Lamp',
                      content=Label(text='Msg here', font_size='30sp'),
                      size_hint=(1, 1), auto_dismiss=False)
+    
+    def _decay_happiness(self, dt):
+        decay_amount = 5
 
+        self.hunger = max(self.hunger - decay_amount, 0)
+        self.happiness = max(self.happiness - decay_amount, 0)
+        
+    def _decay_cleanliness(self, dt):
+        decay_amount = 20
+
+        self.cleanliness = max(self.cleanliness - decay_amount, 0)
+        
+    def _pet_walk(self, dt):
+        if not hasattr(self, '_dx'):
+            self._dx = randint(-2, 2)
+            self._dy = randint(-2, 2)
+
+        # small random change in direction for wandering
+        if randint(0, 10) > 7:  # ~30% chance to tweak direction
+            self._dx += randint(-1, 1)
+            self._dy += randint(-1, 1)
+            self._dx = max(-2, min(2, self._dx))
+            self._dy = max(-2, min(2, self._dy))
+
+        # update position
+        new_x = self.lampet_x + self._dx
+        new_y = self.lampet_y + self._dy
+
+        # keep within screen bounds
+        if self.root:
+            new_x = max(0, min(new_x, self.root.width - 1))
+            new_y = max(0, min(new_y, self.root.height - 1))
+
+        self.lampet_x = new_x
+        self.lampet_y = new_y
     def on_hue(self, instance: Any, value: float) -> None:
         if self._updating_ui:
             return
@@ -203,6 +241,24 @@ class LampiApp(App):
         if self._publish_clock is None:
             self._publish_clock = Clock.schedule_once(
                 lambda dt: self._update_leds(), MQTT_PUBLISH_THROTTLE_SECS)
+            
+    def on_happiness(self, instance: Any, value: float) -> None:
+        msg = {'happiness': self.happiness, 'hunger': self.hunger, 'cleanliness': self.cleanliness}
+        self.mqtt.publish(TOPIC_SET_LAMPet_CONFIG,
+                          json.dumps(msg).encode('utf-8'),
+                          qos=1)
+    
+    def on_cleanliness(self, instance: Any, value: float) -> None:
+        msg = {'happiness': self.happiness, 'hunger': self.hunger, 'cleanliness': self.cleanliness}
+        self.mqtt.publish(TOPIC_SET_LAMPet_CONFIG,
+                          json.dumps(msg).encode('utf-8'),
+                          qos=1)
+    
+    def on_hunger(self, instance: Any, value: float) -> None:
+        msg = {'happiness': self.happiness, 'hunger': self.hunger, 'cleanliness': self.cleanliness}
+        self.mqtt.publish(TOPIC_SET_LAMPet_CONFIG,
+                          json.dumps(msg).encode('utf-8'),
+                          qos=1)
 
     def _track_ui_event(self, event_name: str,
                         additional_props: dict[str, Any] = {}) -> None:
@@ -228,6 +284,7 @@ class LampiApp(App):
         self.mqtt.subscribe(broker_bridge_connection_topic(), qos=1)
         self.mqtt.subscribe(TOPIC_LAMP_CHANGE_NOTIFICATION, qos=1)
         self.mqtt.subscribe(TOPIC_LAMP_ASSOCIATED, qos=2)
+        self.mqtt.subscribe(TOPIC_LAMPet_CHANGE_NOTIFICATION, qos=1)
 
     def _poll_associated(self, dt):
         # this polling loop allows us to synchronize changes from the
