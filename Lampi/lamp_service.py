@@ -4,6 +4,7 @@ import json
 import pigpio
 import paho.mqtt.client as mqtt
 import shelve
+import threading
 import colorsys
 from typing import Any, Optional
 
@@ -17,12 +18,15 @@ PWM_RANGE: int = 1000
 PWM_FREQUENCY: int = 1000
 
 LAMP_STATE_FILENAME: str = "lamp_state"
-
 MQTT_CLIENT_ID: str = "lamp_service"
 
 FP_DIGITS: int = 2
-
 MAX_STARTUP_WAIT_SECS: float = 10.0
+
+PET_DECAY_INTERVAL = 5.0
+HUNGER_DECAY = 1
+HAPPINESS_DECAY = 1
+CLEANLINESS_DECAY = 2
 
 
 class InvalidLampConfig(Exception):
@@ -30,7 +34,6 @@ class InvalidLampConfig(Exception):
 
 
 class LampDriver:
-
     def __init__(self) -> None:
         self._gpio: pigpio.pi = pigpio.pi()
         for color_pin in PINS:
@@ -49,7 +52,9 @@ class LampService:
     def __init__(self) -> None:
         self.lamp_driver: LampDriver = LampDriver()
         self._client: mqtt.Client = self._create_and_configure_broker_client()
+        self.db_lock = threading.Lock()
         self.db: shelve.Shelf[Any] = shelve.open(LAMP_STATE_FILENAME)
+        
         if 'color' not in self.db:
             self.db['color'] = {'h': round(1.0, FP_DIGITS),
                                 's': round(1.0, FP_DIGITS)}
@@ -66,6 +71,14 @@ class LampService:
                 'cleanliness': 100
             }
         self.write_current_settings_to_hardware()
+        
+    def db_get(self, key):
+        with self.db_lock:
+            return self.db[key]
+
+    def db_set(self, key, value):
+        with self.db_lock:
+            self.db[key] = value
 
     def _create_and_configure_broker_client(self) -> mqtt.Client:
         client = mqtt.Client(
@@ -79,42 +92,39 @@ class LampService:
         client.on_connect = self.on_connect
         client.message_callback_add(TOPIC_SET_LAMP_CONFIG,
                                     self.on_message_set_config)
-        client.message_callback_add(TOPIC_SET_LAMPet_CONFIG, self.on_message_set_pet_status)
-        client.on_message = self.default_on_message
+        client.message_callback_add(TOPIC_SET_LAMPet_CONFIG, 
+                                    self.on_message_set_pet_status)
+
         return client
 
     def serve(self) -> None:
-        start_time = time.time()
         while True:
             try:
-                self._client.connect(MQTT_BROKER_HOST,
-                                     port=MQTT_BROKER_PORT,
-                                     keepalive=MQTT_BROKER_KEEP_ALIVE_SECS)
+                self._client.connect(
+                    MQTT_BROKER_HOST,
+                    port=MQTT_BROKER_PORT,
+                    keepalive=MQTT_BROKER_KEEP_ALIVE_SECS
+                )
                 print("Connected to broker")
                 break
-            except ConnectionRefusedError as e:
-                current_time = time.time()
-                delay = current_time - start_time
-                if (delay) < MAX_STARTUP_WAIT_SECS:
-                    print("Error connecting to broker; delaying and "
-                          "will retry; delay={:.0f}".format(delay))
-                    time.sleep(1)
-                else:
-                    raise e
-        try:
-            self._client.loop_forever()
-        finally:
-            self.db.close()
+            except Exception:
+                print("Retrying connection...")
+                time.sleep(1)
 
-    def on_connect(self, client: mqtt.Client, userdata: Any,
-                   flags: mqtt.ConnectFlags, reason_code: mqtt.ReasonCode,
-                   properties: Optional[mqtt.Properties]) -> None:
-        print(f"Connected with reason code: {reason_code}")
-        self._client.publish(client_state_topic(MQTT_CLIENT_ID), "1",
-                             qos=2, retain=True)
+        last = time.time()
+
+        while True:
+            self._client.loop(timeout=1.0)  
+
+            now = time.time()
+            if now - last >= PET_DECAY_INTERVAL:
+                self.apply_decay()
+                last = now
+
+    def on_connect(self, client, userdata, flags, reason_code, properties=None):
+        self._client.publish(client_state_topic(MQTT_CLIENT_ID), "1", qos=2, retain=True)
         self._client.subscribe(TOPIC_SET_LAMP_CONFIG, qos=1)
         self._client.subscribe(TOPIC_SET_LAMPet_CONFIG, qos=1)
-        # publish current lamp state at startup
         self.publish_config_change()
 
     def default_on_message(self, client: mqtt.Client, userdata: Any,
@@ -141,65 +151,104 @@ class LampService:
             
     def on_message_set_pet_status(self, client, userdata, msg):
         try:
-            new_status = json.loads(msg.payload.decode('utf-8'))
-            # Validate keys
-            for key in ['hunger', 'happiness', 'cleanliness']:
-                if key not in new_status:
-                    print(f"Invalid pet payload, missing {key}")
-                    return
-            self.db['pet_state'] = new_status
-            self.publish_pet_change()
-        except Exception as e:
-            print("Error processing pet message:", e)
+            data = json.loads(msg.payload.decode())
 
-    def publish_config_change(self) -> None:
-        config = {'color': self.get_current_color(),
-                  'brightness': self.get_current_brightness(),
-                  'on': self.get_current_onoff(),
-                  'client': self.get_last_client()}
-        self._client.publish(TOPIC_LAMP_CHANGE_NOTIFICATION,
-                             json.dumps(config).encode('utf-8'), qos=1,
-                             retain=True)
-    
+            if 'action' in data:
+                self.apply_action(data['action'])
+            else:
+                print("Invalid pet message:", data)
+
+        except Exception as e:
+            print("pet message error:", e)
+
+    def apply_action(self, action: str):
+        pet = self.db_get('pet_state')
+
+        if action == "eat":
+            pet['hunger'] = min(100, pet['hunger'] + 20)
+
+        elif action == "play":
+            pet['happiness'] = min(100, pet['happiness'] + 20)
+
+        elif action == "clean":
+            pet['cleanliness'] = min(100, pet['cleanliness'] + 30)
+
+        self.db['pet_state'] = pet
+        self.publish_pet_change()
+
+    # ---------------- DECAY SYSTEM ----------------
+
+
+    def apply_decay(self):
+        pet = self.db_get('pet_state')
+
+        pet['hunger'] = max(0, pet['hunger'] - HUNGER_DECAY)
+        pet['happiness'] = max(0, pet['happiness'] - HAPPINESS_DECAY)
+        pet['cleanliness'] = max(0, pet['cleanliness'] - CLEANLINESS_DECAY)
+
+        self.db_set('pet_state', pet)
+        self.publish_pet_change()
+
+    # ---------------- PUBLISH ----------------
+
     def publish_pet_change(self):
-        pet_status = self.db['pet_state']
-        self._client.publish(TOPIC_LAMPet_CHANGE_NOTIFICATION, 
-                            json.dumps(pet_status).encode('utf-8'),
-                            qos=1, retain=True)
+        self._client.publish(
+            TOPIC_LAMPet_CHANGE_NOTIFICATION,
+            json.dumps(self.db_get('pet_state')).encode(),
+            qos=1,
+            retain=True
+        )
+
+    def publish_config_change(self):
+        config = {
+            'color': self.get_current_color(),
+            'brightness': self.get_current_brightness(),
+            'on': self.get_current_onoff(),
+            'client': self.get_last_client()
+        }
+
+        self._client.publish(
+            TOPIC_LAMP_CHANGE_NOTIFICATION,
+            json.dumps(config).encode(),
+            qos=1,
+            retain=True
+        )
+
+    # ---------------- LAMP STATE ----------------
 
     def get_last_client(self) -> str:
-        return self.db['client']
+        return self.db_get('client')
 
     def set_last_client(self, new_client: str) -> None:
-        self.db['client'] = new_client
+        self.db_set('client', new_client)
 
     def get_current_brightness(self) -> float:
-        return self.db['brightness']
+        return self.db_get('brightness')
 
     def set_current_brightness(self, new_brightness: float) -> None:
         if new_brightness < 0 or new_brightness > 1.0:
             raise InvalidLampConfig()
-        self.db['brightness'] = round(new_brightness, FP_DIGITS)
+        self.db_set('brightness', round(new_brightness, FP_DIGITS))
         self.write_current_settings_to_hardware()
 
     def get_current_onoff(self) -> bool:
-        return self.db['on']
+        return self.db_get('on')
 
     def set_current_onoff(self, new_onoff: bool) -> None:
         if new_onoff not in [True, False]:
             raise InvalidLampConfig()
-        self.db['on'] = new_onoff
+        self.db_set('on', new_onoff)
         self.write_current_settings_to_hardware()
 
     def get_current_color(self) -> dict[str, float]:
-        return self.db['color'].copy()
+        return self.db_get('color').copy()
 
     def set_current_color(self, new_color: dict[str, float]) -> None:
         for ch in ['h', 's']:
             if new_color[ch] < 0 or new_color[ch] > 1.0:
                 raise InvalidLampConfig()
-        self.db['color'] = {'h': round(new_color['h'], FP_DIGITS),
-                            's': round(new_color['s'], FP_DIGITS)}
+        self.db_set('color', {'h': round(new_color['h'], FP_DIGITS),
+                            's': round(new_color['s'], FP_DIGITS)})
         self.write_current_settings_to_hardware()
 
     def write_current_settings_to_hardware(self) -> None:

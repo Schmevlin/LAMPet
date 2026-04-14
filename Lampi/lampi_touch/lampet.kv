@@ -39,15 +39,15 @@
             Button:
                 size_hint_x: 0.25
                 text: 'play'
-                on_release: app.happiness += 20
+                on_release: app.send_action('play')
             Button:
                 size_hint_x: 0.25
                 text: 'feed'
-                on_release: app.hunger += 20
+                on_release: app.send_action('eat')
             Button:
                 size_hint_x: 0.25
                 text: 'clean'
-                on_release: app.cleanliness += 30
+                on_release: app.send_action('clean')
             Button:
                 size_hint_x: 0.25
                 text: 'swap\npage'
