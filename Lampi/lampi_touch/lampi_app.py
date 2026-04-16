@@ -192,8 +192,8 @@ class LampiApp(App):
 
         # keep within screen bounds
         if self.root:
-            new_x = max(0, min(new_x, self.root.width - 30))
-            new_y = max(0, min(new_y, self.root.height - 30))
+            new_x = max(0, min(new_x, self.root.width - 60))
+            new_y = max(60, min(new_y, self.root.height - 60))
 
         self.lampet_x = new_x
         self.lampet_y = new_y
@@ -233,10 +233,12 @@ class LampiApp(App):
             self._publish_clock = Clock.schedule_once(
                 lambda dt: self._update_leds(), MQTT_PUBLISH_THROTTLE_SECS)
             
-    def send_action(self, action: str):
+    def send_action(self, action: str, value: int = 10) -> None:
         self.mqtt.publish(
             TOPIC_SET_LAMPet_CONFIG,
-            json.dumps({"action": action, "client": MQTT_CLIENT_ID}).encode(),
+            json.dumps({"action": action, 
+                        "value": value,
+                        "client": MQTT_CLIENT_ID}).encode(),
             qos=1
         )
 

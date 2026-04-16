@@ -158,28 +158,29 @@ class LampService:
             data = json.loads(msg.payload.decode())
 
             if 'action' in data:
-                self.apply_action(data['action'])
+                self.apply_action(data['action'], data['value'])
             else:
                 print("Invalid pet message:", data)
 
         except Exception as e:
             print("pet message error:", e)
 
-    def apply_action(self, action: str):
-        print("ACTION:", action, type(action))
+    def apply_action(self, action: str, value: int):
+        print("ACTION:", action, "VALUE:", value, type(action), type(value))
         pet = self.db_get('pet_state')
         
-        if action == "eat":
-            pet['hunger'] = min(100, pet['hunger'] + 20)
+        if pet['state'] != 'dead':
+            if action == "eat":
+                pet['hunger'] = min(100, pet['hunger'] + value)
 
-        elif action == "play":
-            pet['happiness'] = min(100, pet['happiness'] + 20)
+            elif action == "play":
+                pet['happiness'] = min(100, pet['happiness'] + value)
 
-        elif action == "clean":
-            pet['cleanliness'] = min(100, pet['cleanliness'] + 30)
+            elif action == "clean":
+                pet['cleanliness'] = min(100, pet['cleanliness'] + value)
 
-        self.db['pet_state'] = pet
-        self.publish_pet_change()
+            self.db['pet_state'] = pet
+            self.publish_pet_change()
 
 
     def apply_decay(self):
