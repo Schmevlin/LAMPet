@@ -8,6 +8,7 @@ TOPIC_LAMP_CHANGE_NOTIFICATION: str = "lamp/changed"
 TOPIC_LAMP_ASSOCIATED: str = "lamp/associated"
 TOPIC_SET_LAMPet_CONFIG: str = "lampi/set_pet_status"
 TOPIC_LAMPet_CHANGE_NOTIFICATION: str = "lampi/changed_pet_status"
+TOPIC_LAMPet_DEBUG: str = "lampi/debug_pet_status"
 
 
 

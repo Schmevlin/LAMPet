@@ -7,6 +7,7 @@ from typing import Any, Optional
 import paho.mqtt.client as mqtt
 from paho.mqtt.client import Client, CallbackAPIVersion
 from lamp_common import *
+import time 
 
 MQTT_CLIENT_ID = 'lampet_cmd'
 
@@ -14,13 +15,7 @@ MQTT_CLIENT_ID = 'lampet_cmd'
 class LampetCmd:
 
     def __init__(self) -> None:
-        # start with default state in case no message received yet
-        self.received_pet_state: dict[str, Any] = {
-            'hunger': 100,
-            'happiness': 100,
-            'cleanliness': 100
-        }
-
+        self.received_pet_state: Optional[dict[str, Any]] = None
         self.client: Client = Client(
             callback_api_version=CallbackAPIVersion.VERSION2,
             client_id=MQTT_CLIENT_ID
@@ -30,13 +25,17 @@ class LampetCmd:
         self.client.connect(MQTT_BROKER_HOST,
                             port=MQTT_BROKER_PORT,
                             keepalive=MQTT_BROKER_KEEP_ALIVE_SECS)
+        self._wait_for_pet_state()
         self.client.loop_start()
 
     def build_argument_parser(self) -> argparse.ArgumentParser:
+        help_text = 'Value between 0 and 100'
+        error_text = '%s must be between 0 and 100'
         parser = argparse.ArgumentParser()
         parser.add_argument('--hunger', type=int, help='Hunger value 0-100')
         parser.add_argument('--happiness', type=int, help='Happiness value 0-100')
         parser.add_argument('--cleanliness', type=int, help='Cleanliness value 0-100')
+        parser.add_argument('--state', type=str, choices=['alive', 'dying', 'dead'], help='Preset state')
         return parser
 
     def _receive_pet_state(self, client: Client, userdata: Any,
@@ -44,10 +43,12 @@ class LampetCmd:
         self.received_pet_state = json.loads(message.payload.decode('utf-8'))
 
     def _print_pet_state(self) -> None:
-        print("Hunger: {} Happiness: {} Cleanliness: {}".format(
+        print("Hunger: {} Happiness: {} Cleanliness: {} State: {} Since: {}".format(
             self.received_pet_state['hunger'],
             self.received_pet_state['happiness'],
-            self.received_pet_state['cleanliness']
+            self.received_pet_state['cleanliness'],
+            self.received_pet_state['state'],
+            self.received_pet_state['state_since'],
         ))
 
     def on_connect(self, client: Client, userdata: Any,
@@ -56,13 +57,38 @@ class LampetCmd:
         client.message_callback_add(TOPIC_LAMPet_CHANGE_NOTIFICATION,
                                     self._receive_pet_state)
         client.subscribe(TOPIC_LAMPet_CHANGE_NOTIFICATION, qos=1)
+        
+    def validate_args(self, args):
+        stat_args = [args.hunger, args.happiness, args.cleanliness]
+        any_stats = any(v is not None for v in stat_args)
+
+        if args.state and any_stats:
+            raise SystemExit("--state cannot be combined with hunger/happiness/cleanliness")
 
     def update_pet_state(self) -> None:
         args = self.build_argument_parser().parse_args()
-        
+        self.validate_args(args)
         print(args)
 
         # apply CLI args to current state
+        if args.state is not None:
+            if args.state == 'alive':
+                self.received_pet_state['hunger'] = 100
+                self.received_pet_state['happiness'] = 100
+                self.received_pet_state['cleanliness'] = 100
+                self.received_pet_state['state'] = 'alive'
+            elif args.state == 'dying':
+                self.received_pet_state['hunger'] = 0
+                self.received_pet_state['happiness'] = 0
+                self.received_pet_state['cleanliness'] = 0
+                self.received_pet_state['state'] = 'dying'
+                self.received_pet_state['state_since'] = time.time()
+            elif args.state == 'dead':
+                self.received_pet_state['hunger'] = 0
+                self.received_pet_state['happiness'] = 0
+                self.received_pet_state['cleanliness'] = 0
+                self.received_pet_state['state'] = 'dead'
+                self.received_pet_state['state_since'] = time.time()
         if args.hunger is not None:
             self.received_pet_state['hunger'] = args.hunger
         if args.happiness is not None:
@@ -70,14 +96,22 @@ class LampetCmd:
         if args.cleanliness is not None:
             self.received_pet_state['cleanliness'] = args.cleanliness
 
+
         print(self.received_pet_state)
         # publish the new state
-        self.client.publish(TOPIC_SET_LAMPet_CONFIG,
+        self.client.publish(TOPIC_LAMPet_DEBUG,
                             json.dumps(self.received_pet_state).encode('utf-8'),
                             qos=1)
         
         sleep(0.1)
         self.client.loop_stop()
+        
+    def _wait_for_pet_state(self) -> None:
+        for _ in range(10):
+            if self.received_pet_state:
+                return
+            self.client.loop(timeout=0.05)
+        raise Exception("Timeout waiting for pet state")
 
 def main() -> None:
     cmd = LampetCmd()

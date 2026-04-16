@@ -98,6 +98,8 @@ class LampService:
                                     self.on_message_set_config)
         client.message_callback_add(TOPIC_SET_LAMPet_CONFIG, 
                                     self.on_message_set_pet_status)
+        client.message_callback_add(TOPIC_LAMPet_DEBUG,
+                                    self.on_message_debug_pet_status)
 
         return client
 
@@ -112,7 +114,7 @@ class LampService:
                 print("Connected to broker")
                 break
             except Exception:
-                print("Retrying connection...")
+                print("Retrying xion...")
                 time.sleep(1)
 
         last = time.time()
@@ -129,6 +131,7 @@ class LampService:
         self._client.publish(client_state_topic(MQTT_CLIENT_ID), "1", qos=2, retain=True)
         self._client.subscribe(TOPIC_SET_LAMP_CONFIG, qos=1)
         self._client.subscribe(TOPIC_SET_LAMPet_CONFIG, qos=1)
+        self._client.subscribe(TOPIC_LAMPet_DEBUG, qos=1)
         self.publish_config_change()
 
     def default_on_message(self, client: mqtt.Client, userdata: Any,
@@ -164,6 +167,23 @@ class LampService:
 
         except Exception as e:
             print("pet message error:", e)
+            
+    def on_message_debug_pet_status(self, client, userdata, msg):
+        try:
+            data = json.loads(msg.payload.decode())
+            self.apply_pet_debug(
+                hunger=data.get('hunger'),
+                happiness=data.get('happiness'),
+                cleanliness=data.get('cleanliness'),
+                state=data.get('state'),
+                state_since=data.get('state_since')
+            )
+            
+            
+            
+                
+        except Exception as e:
+            print("debug pet message error:", e)
 
     def apply_action(self, action: str, value: int):
         print("ACTION:", action, "VALUE:", value, type(action), type(value))
@@ -181,6 +201,23 @@ class LampService:
 
             self.db['pet_state'] = pet
             self.publish_pet_change()
+            
+    def apply_pet_debug(self, hunger: int, happiness: int, cleanliness: int, state: str, state_since: float):
+        pet = self.db_get('pet_state')
+        
+        if hunger is not None:
+            pet['hunger'] = max(0, min(100, hunger))
+        if happiness is not None:
+            pet['happiness'] = max(0, min(100, happiness))
+        if cleanliness is not None:
+            pet['cleanliness'] = max(0, min(100, cleanliness))
+        if state is not None:
+            pet['state'] = state
+        if state_since is not None:
+            pet['state_since'] = state_since
+            
+        self.db['pet_state'] = pet
+        self.publish_pet_change()
 
 
     def apply_decay(self):
