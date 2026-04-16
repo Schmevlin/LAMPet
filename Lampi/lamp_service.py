@@ -7,6 +7,7 @@ import shelve
 import threading
 import colorsys
 from typing import Any, Optional
+from datetime import datetime
 
 from lamp_common import *
 
@@ -24,9 +25,9 @@ FP_DIGITS: int = 2
 MAX_STARTUP_WAIT_SECS: float = 10.0
 
 PET_DECAY_INTERVAL = 5.0
-HUNGER_DECAY = 1
-HAPPINESS_DECAY = 1
-CLEANLINESS_DECAY = 2
+HUNGER_DECAY = 5
+HAPPINESS_DECAY = 5
+CLEANLINESS_DECAY = 20
 
 
 class InvalidLampConfig(Exception):
@@ -68,8 +69,11 @@ class LampService:
             self.db['pet_state'] = {
                 'hunger': 100,
                 'happiness': 100,
-                'cleanliness': 100
+                'cleanliness': 100,
+                'state': 'alive',
+                'state_since': None
             }
+            
         self.write_current_settings_to_hardware()
         
     def db_get(self, key):
@@ -162,8 +166,9 @@ class LampService:
             print("pet message error:", e)
 
     def apply_action(self, action: str):
+        print("ACTION:", action, type(action))
         pet = self.db_get('pet_state')
-
+        
         if action == "eat":
             pet['hunger'] = min(100, pet['hunger'] + 20)
 
@@ -176,18 +181,53 @@ class LampService:
         self.db['pet_state'] = pet
         self.publish_pet_change()
 
-    # ---------------- DECAY SYSTEM ----------------
-
 
     def apply_decay(self):
         pet = self.db_get('pet_state')
+        
+        old_pet = pet.copy()
 
         pet['hunger'] = max(0, pet['hunger'] - HUNGER_DECAY)
         pet['happiness'] = max(0, pet['happiness'] - HAPPINESS_DECAY)
         pet['cleanliness'] = max(0, pet['cleanliness'] - CLEANLINESS_DECAY)
+        
+        
+        is_critical = sum([
+            pet['hunger'] == 0,
+            pet['happiness'] == 0,
+            pet['cleanliness'] == 0
+        ]) >= 2
+        
+        now = time.time()
 
-        self.db_set('pet_state', pet)
-        self.publish_pet_change()
+
+        if pet['state'] == 'alive':
+            if is_critical:
+                pet['state'] = 'dying'
+                pet['state_since'] = now
+
+        elif pet['state'] == 'dying':
+            if not is_critical:
+                pet['state'] = 'alive'
+                pet['state_since'] = None
+            elif now - pet['state_since'] >= 60:
+                pet['state'] = 'dead'
+                pet['state_since'] = now
+
+        elif pet['state'] == 'dead':
+            # check next-day
+            death_time = datetime.fromtimestamp(pet['state_since'])
+            if datetime.now().date() > death_time.date():
+                pet['state'] = 'alive'
+                pet['state_since'] = None
+
+                pet['hunger'] = 100
+                pet['happiness'] = 100
+                pet['cleanliness'] = 100
+
+        if pet != old_pet:
+            self.db_set('pet_state', pet)
+            self.publish_pet_change()
 
     # ---------------- PUBLISH ----------------
 

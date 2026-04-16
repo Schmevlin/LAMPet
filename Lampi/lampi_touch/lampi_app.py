@@ -78,6 +78,7 @@ class LampiApp(App):
     _hunger = NumericProperty(50)
     _cleanliness = NumericProperty(50)
     _happiness = NumericProperty(50)
+    is_dead = BooleanProperty(False)
 
     def _get_hunger(self) -> float:
         return self._hunger
@@ -172,6 +173,8 @@ class LampiApp(App):
                      size_hint=(1, 1), auto_dismiss=False)
             
     def _pet_walk(self, dt):
+        if self.is_dead:
+            return
         if not hasattr(self, '_dx'):
             self._dx = randint(-2, 2)
             self._dy = randint(-2, 2)
@@ -194,6 +197,7 @@ class LampiApp(App):
 
         self.lampet_x = new_x
         self.lampet_y = new_y
+        
     def on_hue(self, instance: Any, value: float) -> None:
         if self._updating_ui:
             return
@@ -317,6 +321,8 @@ class LampiApp(App):
             self.hunger = new_state['hunger']
         if 'cleanliness' in new_state:
             self.cleanliness = new_state['cleanliness']
+        if 'state' in new_state:
+            self.is_dead = new_state['state'] == 'dead'
 
     def _update_ui(self, new_state: dict[str, Any]) -> None:
         """Update UI from MQTT state.
