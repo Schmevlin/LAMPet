@@ -41,7 +41,7 @@ class LampDriver:
             self._gpio.set_mode(color_pin, pigpio.OUTPUT)
             self._gpio.set_PWM_dutycycle(color_pin, 0)
             self._gpio.set_PWM_frequency(color_pin, PWM_FREQUENCY)
-            self._gpio.set_PWM_range(color_pin, PWM_RANGE)
+            self._gpio.set_PWM_range(color_pin, PWM_RANGE)     
 
     def change_color(self, r: float, g: float, b: float) -> None:
         pins_values = zip(PINS, [r, g, b])
@@ -243,6 +243,7 @@ class LampService:
             if is_critical:
                 pet['state'] = 'dying'
                 pet['state_since'] = now
+                self.trigger_flash()
 
         elif pet['state'] == 'dying':
             if not is_critical:
@@ -266,6 +267,35 @@ class LampService:
         if pet != old_pet:
             self.db_set('pet_state', pet)
             self.publish_pet_change()
+            
+    def trigger_flash(self):
+        # store current raw hardware state
+        prev_on = self.get_current_onoff()
+        prev_color = self.get_current_color()
+        prev_brightness = self.get_current_brightness()
+
+        end_time = time.time() + 3
+
+        while time.time() < end_time:
+            # RED ON
+            self.lamp_driver.change_color(1000, 0, 0)
+            time.sleep(0.2)
+
+            # OFF
+            self.lamp_driver.change_color(0, 0, 0)
+            time.sleep(0.2)
+
+        # restore previous state
+        if prev_on:
+            rgb = self.calculate_rgb(
+                prev_color['h'],
+                prev_color['s'],
+                prev_brightness,
+                True
+            )
+            self.lamp_driver.change_color(*rgb)
+        else:
+            self.lamp_driver.change_color(0, 0, 0)
 
     # ---------------- PUBLISH ----------------
 
