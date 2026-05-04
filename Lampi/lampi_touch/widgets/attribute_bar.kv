@@ -1,23 +1,22 @@
 <AttributeBar>:
     orientation: 'horizontal'
     size_hint_y: None
-    height: dp(20)
+    height: dp(25)
     padding: [10, 5]
 
-    Label:
+    Image:
         size_hint_x: 0.2
-        text: root.label_text
-        text_size: self.size
-        halign: 'left'
-        color: 0, 0, 0, 1
-        font_size: '10sp'
+        size_hint_y: 1
+        source: root.icon_source
+        allow_stretch: True
+        keep_ratio: True
 
     Widget:
         size_hint_x: 0.8
         id: bar_canvas
         canvas.before:
             Color:
-                rgba: 0.2, 0.2, 0.2, 0.1  # Background "Track"
+                rgba: 0.2, 0.2, 0.2, 0.1  
             RoundedRectangle:
                 pos: self.pos
                 size: self.size

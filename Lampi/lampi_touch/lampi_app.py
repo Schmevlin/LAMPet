@@ -13,10 +13,13 @@ from kivy.uix.screenmanager import ScreenManager, Screen, NoTransition
 from kivy.lang import Builder
 import paho.mqtt.client as mqtt
 from paho.mqtt.client import Client, CallbackAPIVersion
+from lampi_touch.widgets.poop import Poop
+from lampi_touch.widgets.food import Food
+
 
 from lamp_common import *
 import lampi_touch.lampi_util
-from mixpanel import Mixpanel
+from mixpanel import Mixpanel 
 
 from .widgets.attribute_bar import AttributeBar
 from .widgets.lampet_sprite import LAMPetSprite
@@ -39,7 +42,15 @@ class LampiScreen(Screen):
     pass
 
 class LampetScreen(Screen):
-    pass
+    def on_touch_down(self, touch):
+        app = App.get_running_app()
+
+        if app.feeding_mode:
+            app.spawn_food(touch.x, touch.y)
+            app.feeding_mode = False
+            return True
+
+        return super().on_touch_down(touch)
 
 
 class LampiApp(App):
@@ -79,6 +90,7 @@ class LampiApp(App):
     _cleanliness = NumericProperty(50)
     _happiness = NumericProperty(50)
     is_dead = BooleanProperty(False)
+    feeding_mode = BooleanProperty(False)
 
     def _get_hunger(self) -> float:
         return self._hunger
@@ -164,8 +176,13 @@ class LampiApp(App):
         self.set_up_gpio_and_device_status_popup()
         self.associated_status_popup = self._build_associated_status_popup()
         self.associated_status_popup.bind(on_open=self.update_popup_associated)
+        #schedules for walking
         Clock.schedule_interval(self._poll_associated, 0.1)
         Clock.schedule_interval(self._pet_walk, 0.2)
+        Clock.schedule_interval(self._update_world, 0.2)
+        #list of poop and food that spawned 
+        self.poops = []
+        self.foods = []
 
     def _build_associated_status_popup(self):
         return Popup(title='Associate your Lamp',
@@ -175,29 +192,81 @@ class LampiApp(App):
     def _pet_walk(self, dt):
         if self.is_dead:
             return
-        if not hasattr(self, '_dx'):
-            self._dx = randint(-2, 2)
-            self._dy = randint(-2, 2)
 
-        # small random change in direction for wandering
-        if randint(0, 10) > 7:  # ~30% chance to tweak direction
-            self._dx += randint(-1, 1)
-            self._dy += randint(-1, 1)
-            self._dx = max(-2, min(2, self._dx))
-            self._dy = max(-2, min(2, self._dy))
+        # if there is food, go toward closest one
+        target = None
+        if self.foods:
+            target = min(
+                self.foods,
+                key=lambda f: (f.x - self.lampet_x) ** 2 + (f.y - self.lampet_y) ** 2
+            )
 
-        # update position
-        new_x = self.lampet_x + self._dx
-        new_y = self.lampet_y + self._dy
+        if target:
+            dx = target.x - self.lampet_x
+            dy = target.y - self.lampet_y
+            dist = max(1, (dx * dx + dy * dy) ** 0.5)
 
-        # keep within screen bounds
-        if self.root:
-            new_x = max(0, min(new_x, self.root.width - 60))
-            new_y = max(60, min(new_y, self.root.height - 60))
+            step = 5
+            self.lampet_x += step * dx / dist
+            self.lampet_y += step * dy / dist
+        else:
+            if not hasattr(self, '_dx'):
+                self._dx = randint(-2, 2)
+                self._dy = randint(-2, 2)
 
-        self.lampet_x = new_x
-        self.lampet_y = new_y
+            if randint(0, 10) > 7:
+                self._dx += randint(-1, 1)
+                self._dy += randint(-1, 1)
+                self._dx = max(-2, min(2, self._dx))
+                self._dy = max(-2, min(2, self._dy))
+
+            new_x = self.lampet_x + self._dx
+            new_y = self.lampet_y + self._dy
+
+            if self.root:
+                new_x = max(0, min(new_x, self.root.width - 60))
+                new_y = max(60, min(new_y, self.root.height - 60))
+
+            self.lampet_x = new_x
+            self.lampet_y = new_y
         
+    def _update_world(self, dt):
+        self._check_food_collision()
+        
+    def spawn_poop(self):
+        if not self.root:
+            return
+        
+        poop = Poop()
+        poop.pos = (randint(0, int(self.root.width - 60))),randint(60, int(self.root.height - 60))
+        self.root.get_screen("lampet").add_widget(poop)
+        self.poops.append(poop)
+        
+    def spawn_food(self, x, y):
+        food = Food()
+        food.pos = (x, y)
+
+        self.root.get_screen("lampet").add_widget(food)
+        self.foods.append(food)
+        
+    def _check_food_collision(self):
+        if not self.root:
+            return
+
+        pet_x = self.lampet_x
+        pet_y = self.lampet_y
+
+        for food in self.foods[:]:
+            dx = food.x - pet_x
+            dy = food.y - pet_y
+
+            if (dx * dx + dy * dy) < 25 * 25:
+                if food.parent:
+                    food.parent.remove_widget(food)
+
+                self.foods.remove(food)
+                self.send_action("eat", 20)
+                
     def on_hue(self, instance: Any, value: float) -> None:
         if self._updating_ui:
             return
@@ -322,7 +391,11 @@ class LampiApp(App):
         if 'hunger' in new_state:
             self.hunger = new_state['hunger']
         if 'cleanliness' in new_state:
-            self.cleanliness = new_state['cleanliness']
+            incoming = new_state['cleanliness']
+            if incoming < self.cleanliness:
+                Clock.schedule_once(lambda dt: self.spawn_poop(), 0)
+                
+            self.cleanliness = incoming
         if 'state' in new_state:
             self.is_dead = new_state['state'] == 'dead'
 
@@ -335,6 +408,8 @@ class LampiApp(App):
         if self._updated and new_state.get('client') == MQTT_CLIENT_ID:
             # ignore updates generated by this client, except the first to
             #   make sure the UI is synchronized with the lamp_service
+            # but it will update the play status wowwowowowowo
+            self.send_action("play", 10) 
             return
         self._updating_ui = True
         try:

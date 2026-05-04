@@ -8,7 +8,7 @@ Builder.load_file(kv_path)
 
 class AttributeBar(BoxLayout):
     # These properties are "observable" by the KV file
-    label_text = StringProperty("Stat")
+    icon_source = StringProperty('')  # Path to the icon image
     value = NumericProperty(50)
     max_value = NumericProperty(100)
     bar_color = ColorProperty([0.7, 0.7, 0.7, 1])
