@@ -36,20 +36,12 @@
             size_hint: (1, 0.2)
             pos_hint: {'x': 0, 'y' : 0}
             orientation: 'horizontal'
-            Button:
-                size_hint_x: 0.25
-                text: 'play'
-                on_release: app.send_action('play', value=10)
             ToggleButton:
                 size_hint_x: 0.25
                 text: 'feed'
                 state: 'down' if app.feeding_mode else 'normal'
                 on_state:
                     app.feeding_mode = (self.state == "down")
-            # Button:
-            #     size_hint_x: 0.25
-            #     text: 'clean'
-            #     on_release: app.send_action('clean', value=30)
             Button:
                 size_hint_x: 0.25
                 text: 'swap\npage'

@@ -422,7 +422,9 @@ class LampiApp(App):
                 self.lamp_is_on = new_state['on']
         finally:
             self._updating_ui = False
+        self.send_action("play", 10) 
         self._updated = True
+        
 
     def _update_leds(self) -> None:
         msg = {'color': {'h': self._hue, 's': self._saturation},

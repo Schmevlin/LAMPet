@@ -50,18 +50,22 @@
         id: button_hue
         size_hint_y: 0.1
         color: hsv_to_rgb(app.hue, app.saturation, 1.0)
-      BoxLayout:
+      FloatLayout:
         LampiToggle:
           id: button_onoff
-          size_hint_y: 0.90
-          size_hint_x: 0.75
           image: 'images/power_icon_light.png'
           accent_color: hsv_to_rgb(hue_slider.value, saturation_slider.value, 1.0)
           text: ''
           state: 'down' if app.lamp_is_on else 'normal'
-          on_state:  app.lamp_is_on = True if self.state == 'down' else False
+          on_state: app.lamp_is_on = True if self.state == 'down' else False
+
         Button:
-          text: 'Pet'
-          size_hint_y: 0.90
-          size_hint_x: 0.25
+          size_hint: None, None
+          size: 50, 50
+          pos_hint: {"right": 0.95, "center_y": 0.5}
+
+          background_normal: 'images/guy_icon.png'
+          background_down: 'images/guy_icon.png'
+          border: (0, 0, 0, 0)
+
           on_release: root.manager.current = 'lampet'
