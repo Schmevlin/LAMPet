@@ -181,7 +181,6 @@ class LampiApp(App):
         Clock.schedule_interval(self._pet_walk, 0.2)
         Clock.schedule_interval(self._update_world, 0.2)
         #list of poop and food that spawned 
-        self.poops = []
         self.foods = []
 
     def _build_associated_status_popup(self):
@@ -251,7 +250,6 @@ class LampiApp(App):
         poop = Poop()
         poop.pos = (randint(0, int(self.root.width - 60))),randint(60, int(self.root.height - 60))
         self.root.get_screen("lampet").add_widget(poop)
-        self.poops.append(poop)
         
     def spawn_food(self, x, y):
         if self.is_dead:

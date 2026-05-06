@@ -35,7 +35,7 @@ class Poop(ButtonBehavior, Widget):
 
         screen = app.root.get_screen("lampet")
 
-        if self in app.poops:
-            app.poops.remove(self)
+        # if self in app.poops:
+        #     app.poops.remove(self)
         
         screen.remove_widget(self)
