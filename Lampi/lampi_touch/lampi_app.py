@@ -243,10 +243,29 @@ class LampiApp(App):
         self.poops.append(poop)
         
     def spawn_food(self, x, y):
+        screen = self.root.get_screen("lampet")
+
+        # define bounds (same idea as your clamp logic)
+        if x < 0 or x > screen.width - 10:
+            return
+        if y < 40 or y > screen.height - 60:
+            return
+
         food = Food()
         food.pos = (x, y)
 
-        self.root.get_screen("lampet").add_widget(food)
+        screen.add_widget(food)
+        self.foods.append(food)
+        
+    def spawn_airDrop(self):
+        if not self.root:
+            return
+        
+        screen = self.root.get_screen("lampet")
+        
+        food = Food(is_air_drop=True)
+        food.pos = (randint(0, int(self.root.width - 60))),randint(60, int(self.root.height - 60))
+        screen.add_widget(food)
         self.foods.append(food)
         
     def _check_food_collision(self):
@@ -334,10 +353,14 @@ class LampiApp(App):
                                        self.receive_associated)
         self.mqtt.message_callback_add(TOPIC_LAMPet_CHANGE_NOTIFICATION,
                                        self.receive_new_lampet_state)
+        self.mqtt.message_callback_add(TOPIC_LAMPet_CONFIG,
+                                       self.receive_airDrop)
+        
         self.mqtt.subscribe(broker_bridge_connection_topic(), qos=1)
         self.mqtt.subscribe(TOPIC_LAMP_CHANGE_NOTIFICATION, qos=1)
         self.mqtt.subscribe(TOPIC_LAMP_ASSOCIATED, qos=2)
         self.mqtt.subscribe(TOPIC_LAMPet_CHANGE_NOTIFICATION, qos=1)
+        self.mqtt.subscribe(TOPIC_LAMPet_CONFIG, qos=1)
 
     def _poll_associated(self, dt):
         # this polling loop allows us to synchronize changes from the
@@ -398,6 +421,14 @@ class LampiApp(App):
             self.cleanliness = incoming
         if 'state' in new_state:
             self.is_dead = new_state['state'] == 'dead'
+            
+    def receive_airDrop(self, client: Client, userdata: Any,
+                               message: mqtt.MQTTMessage) -> None:
+        new_state = json.loads(message.payload.decode('utf-8'))
+        if self._updated and new_state.get('client') == "web":
+            if 'action' in new_state:
+                if new_state['action'] == 'eat':
+                    Clock.schedule_once(lambda dt: self.spawn_airDrop(), 0)
 
     def _update_ui(self, new_state: dict[str, Any]) -> None:
         """Update UI from MQTT state.

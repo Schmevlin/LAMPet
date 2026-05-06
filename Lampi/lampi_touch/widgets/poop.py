@@ -7,7 +7,7 @@ from lamp_common import *
 
 
 class Poop(ButtonBehavior, Widget):
-    size_value = NumericProperty(30)
+    size_value = NumericProperty(50)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

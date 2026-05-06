@@ -159,6 +159,10 @@ class LampService:
     def on_message_set_pet_status(self, client, userdata, msg):
         try:
             data = json.loads(msg.payload.decode())
+            if 'client' in data:
+                if data['client'] != "web":
+                    print("Ignoring pet config from non-web client:", data['client'])
+                    return
 
             if 'action' in data:
                 self.apply_action(data['action'], data['value'])

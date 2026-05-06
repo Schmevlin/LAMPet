@@ -33,15 +33,25 @@
                 value: app.happiness
 
         BoxLayout:
-            size_hint: (1, 0.2)
+            size_hint_y: 0.2
             orientation: 'horizontal'
+            spacing: 12
+            padding: [12, 8]
+
+            Button:
+                size_hint_x: 0.36
+                background_normal: 'images/back_button.png'
+                background_down: 'images/back_button.png'
+                on_release: root.manager.current = 'lampi'
+                background_stretch: False
+                border: (0, 0, 0, 0)
+
             ToggleButton:
-                size_hint_x: 0.25
-                text: 'feed'
+                size_hint_x: 0.64
+                background_normal: 'images/feed_button.png'
+                background_down: 'images/feed_pressed.png'
                 state: 'down' if app.feeding_mode else 'normal'
+                background_stretch: False
+                border: (0, 0, 0, 0)
                 on_state:
                     app.feeding_mode = (self.state == "down")
-            Button:
-                size_hint_x: 0.25
-                text: 'swap\npage'
-                on_release: root.manager.current = 'lampi'

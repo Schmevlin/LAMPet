@@ -8,23 +8,31 @@ from lamp_common import *
 
 class Food(Widget):
     size_value = NumericProperty(30)
+    is_air_drop = BooleanProperty(False)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         self.img = Image(
             source="images/food.png",
-            size=(self.size_value, self.size_value),
             size_hint=(None, None)
         )
 
         self.add_widget(self.img)
 
-        self.bind(pos=self._update_pos)
-        self._update_pos()
+        self.bind(pos=self._update)
+        self.bind(size=self._update)
+        self.bind(size_value=self._update)
 
-    def _update_pos(self, *args):
-        self.img.pos = self.pos
+        self._update()
 
-    def on_size_value(self, *args):
+    def _update(self, *args):
+        # keep widget size synced
+        self.size = (self.size_value, self.size_value)
+
+        # center image inside widget
         self.img.size = (self.size_value, self.size_value)
+        self.img.pos = (
+            self.x + (self.width - self.img.width) / 2,
+            self.y + (self.height - self.img.height) / 2
+        )
