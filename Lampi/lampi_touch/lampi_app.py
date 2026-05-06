@@ -224,8 +224,19 @@ class LampiApp(App):
             new_y = self.lampet_y + self._dy
 
             if self.root:
-                new_x = max(0, min(new_x, self.root.width - 60))
-                new_y = max(60, min(new_y, self.root.height - 60))
+                if new_x > self.root.width - 60:
+                    new_x = self.root.width - 60
+                    self._dx = -self._dx
+                elif new_x < 0:
+                    new_x = 0
+                    self._dx = -self._dx
+
+                if new_y < 50:
+                    new_y = 50
+                    self._dy = -self._dy
+                elif new_y > self.root.height - 60:
+                    new_y = self.root.height - 60
+                    self._dy = -self._dy
 
             self.lampet_x = new_x
             self.lampet_y = new_y
@@ -243,6 +254,9 @@ class LampiApp(App):
         self.poops.append(poop)
         
     def spawn_food(self, x, y):
+        if self.is_dead:
+            return
+
         screen = self.root.get_screen("lampet")
 
         # define bounds (same idea as your clamp logic)
@@ -353,14 +367,14 @@ class LampiApp(App):
                                        self.receive_associated)
         self.mqtt.message_callback_add(TOPIC_LAMPet_CHANGE_NOTIFICATION,
                                        self.receive_new_lampet_state)
-        self.mqtt.message_callback_add(TOPIC_LAMPet_CONFIG,
+        self.mqtt.message_callback_add(TOPIC_SET_LAMPet_CONFIG,
                                        self.receive_airDrop)
         
         self.mqtt.subscribe(broker_bridge_connection_topic(), qos=1)
         self.mqtt.subscribe(TOPIC_LAMP_CHANGE_NOTIFICATION, qos=1)
         self.mqtt.subscribe(TOPIC_LAMP_ASSOCIATED, qos=2)
         self.mqtt.subscribe(TOPIC_LAMPet_CHANGE_NOTIFICATION, qos=1)
-        self.mqtt.subscribe(TOPIC_LAMPet_CONFIG, qos=1)
+        self.mqtt.subscribe(TOPIC_SET_LAMPet_CONFIG, qos=1)
 
     def _poll_associated(self, dt):
         # this polling loop allows us to synchronize changes from the
@@ -424,6 +438,8 @@ class LampiApp(App):
             
     def receive_airDrop(self, client: Client, userdata: Any,
                                message: mqtt.MQTTMessage) -> None:
+        if self.is_dead:
+            return
         new_state = json.loads(message.payload.decode('utf-8'))
         if self._updated and new_state.get('client') == "web":
             if 'action' in new_state:

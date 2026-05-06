@@ -142,6 +142,10 @@ class LampService:
     def on_message_set_config(self, client: mqtt.Client, userdata: Any,
                               msg: mqtt.MQTTMessage) -> None:
         try:
+            if self.db_get('pet_state')['state'] == 'dead':
+                self.set_last_client('it is dead')
+                self.publish_config_change()
+                return
             new_config = json.loads(msg.payload.decode('utf-8'))
             if 'client' not in new_config:
                 raise InvalidLampConfig()
@@ -160,8 +164,8 @@ class LampService:
         try:
             data = json.loads(msg.payload.decode())
             if 'client' in data:
-                if data['client'] != "web":
-                    print("Ignoring pet config from non-web client:", data['client'])
+                if data['client'] == "web":
+                    print("Ignoring pet config from web client:", data['client'])
                     return
 
             if 'action' in data:
