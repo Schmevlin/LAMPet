@@ -11,6 +11,9 @@ class Poop(ButtonBehavior, Widget):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        
+        self.size_hint = (None, None)
+        self.size = (self.size_value, self.size_value)
 
         self.img = Image(
             source="images/poop.png",
@@ -34,8 +37,5 @@ class Poop(ButtonBehavior, Widget):
         app.send_action("clean", 30)
 
         screen = app.root.get_screen("lampet")
-
-        # if self in app.poops:
-        #     app.poops.remove(self)
         
         screen.remove_widget(self)
