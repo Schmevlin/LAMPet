@@ -4,6 +4,7 @@ from kivy.lang import Builder
 import os
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty
 from kivy.clock import Clock
+from kivy.graphics import PushMatrix, PopMatrix, Scale
 
 kv_path = os.path.join(os.path.dirname(__file__), 'lampet_sprite.kv')
 Builder.load_file(kv_path)
@@ -11,11 +12,20 @@ Builder.load_file(kv_path)
 class LAMPetSprite(Image):
 
     is_dead = BooleanProperty(False)
+    is_flip = BooleanProperty(False)
 
     frames = ListProperty([])
     frame_index = NumericProperty(0)
 
     def on_kv_post(self, *args):
+
+        with self.canvas.before:
+            PushMatrix()
+            self.flip_transform = Scale(1, 1, 1, origin=self.center)
+
+        with self.canvas.after:
+            PopMatrix()
+
         self.frames = [
             'images/guy/guy_0.png',
             'images/guy/guy_1.png',
@@ -44,3 +54,18 @@ class LAMPetSprite(Image):
             app.lampet_y = touch.y - self.height / 2
             return True
         return super().on_touch_move(touch)
+
+    def on_is_flip(self, instance, value):
+        if hasattr(self, 'flip_transform'):
+            self.flip_transform.origin = (self.center_x, self.center_y, 0)
+            self.flip_transform.x = -1 if self.is_flip else 1
+
+    def on_pos(self, *args):
+        if hasattr(self, 'flip_transform'):
+            self.flip_transform.origin = self.center
+            self.flip_transform.x = -1 if self.is_flip else 1
+
+    def on_size(self, *args):
+        if hasattr(self, 'flip_transform'):
+            self.flip_transform.origin = self.center
+            self.flip_transform.x = -1 if self.is_flip else 1

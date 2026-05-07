@@ -90,6 +90,7 @@ class LampiApp(App):
     _cleanliness = NumericProperty(50)
     _happiness = NumericProperty(50)
     is_dead = BooleanProperty(False)
+    is_flip = BooleanProperty(False)
     feeding_mode = BooleanProperty(False)
 
     def _get_hunger(self) -> float:
@@ -208,6 +209,11 @@ class LampiApp(App):
             step = 5
             self.lampet_x += step * dx / dist
             self.lampet_y += step * dy / dist
+            
+            if dx > 0:
+                self.is_flip = True
+            else:
+                self.is_flip = False
         else:
             if not hasattr(self, '_dx'):
                 self._dx = randint(-2, 2)
@@ -221,6 +227,11 @@ class LampiApp(App):
 
             new_x = self.lampet_x + self._dx
             new_y = self.lampet_y + self._dy
+            
+            if self._dx > 0:
+                self.is_flip = True
+            else:
+                self.is_flip = False
 
             if self.root:
                 if new_x > self.root.width - 60:
