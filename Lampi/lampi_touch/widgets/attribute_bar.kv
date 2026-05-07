@@ -31,6 +31,6 @@
                 # Width = (Total Width - Padding) * (Value / Max)
                 # Height = Total Height - (Padding * 2)
                 size: 
-                    ( (self.width - (root.inner_padding * 2)) * (root.value / root.max_value), 
+                    ( (self.width - (root.inner_padding * 2)) * ((root.value+1) / root.max_value), 
                     self.height - (root.inner_padding * 2) ) if root.max_value > 0 else (0, 0)
                 radius: [(self.height - (root.inner_padding * 2)) / 2.0]
